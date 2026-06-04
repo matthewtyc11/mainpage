@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>開發者 Cookie 管理器 (全局開放版)</title>
+        <style>
+          body { font-family: sans-serif; background: #121212; color: #fff; text-align: center; padding-top: 4px; margin: 0; padding-bottom: 50px; }
+          #lock-screen { max-width: 350px; margin: 100px auto; background: #1e1e1e; border: 1px solid #444; border-radius: 8px; padding: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); text-align: center; }
+          #lock-screen h3 { color: #ff9800; margin-top: 0; }
+          #lock-screen input { width: 85%; padding: 10px; margin: 15px 0; background: #333; border: 1px solid #555; color: #fff; border-radius: 4px; text-align: center; font-size: 16px; }
+          #lock-screen button { width: 92%; background: #00ffff; color: #000; border: none; padding: 10px; font-weight: bold; border-radius: 4px; cursor: pointer; }
+          .dev-tools-panel { display: none; max-width: 850px; margin: 40px auto 0 auto; background: #1e1e1e; border: 2px solid #00ffff; border-radius: 8px; padding: 25px; text-align: left; box-shadow: 0 4px 15px rgba(0,2,2,0.5); }
+          .dev-title { color: #00ffff; margin-top: 0; font-size: 20px; border-bottom: 1px solid #333; padding-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+          .cookie-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
+          .cookie-table th, .cookie-table td { border: 1px solid #444; padding: 10px; text-align: left; word-break: break-all; }
+          .cookie-table th { background: #2a2a2a; color: #00ffff; }
+          .cookie-table tr:nth-child(even) { background: #151515; }
+          .cookie-input-inline { background: #222; border: 1px solid #555; color: #fff; padding: 6px; width: 92%; border-radius: 3px; }
+          .btn-sm { padding: 6px 12px; font-size: 12px; cursor: pointer; margin-right: 5px; border: none; border-radius: 3px; font-weight: bold; }
+          .btn-save { background: #4caf50; color: #fff; }
+          .btn-del { background: #f44336; color: #fff; }
+          .add-cookie-box { display: flex; gap: 10px; margin-top: 20px; background: #252525; padding: 12px; border-radius: 4px; }
+          .add-cookie-box input { background: #333; border: 1px solid #555; color: #fff; padding: 8px; border-radius: 3px; font-size: 13px; }
+          .link-group { margin-top: 15px; font-size: 13px; }
+          .link-group a { color: #aaa; text-decoration: none; margin-right: 15px; }
+          .link-group a:hover { color: #00ffff; }
+          #backup-sync-btn { background: #ff9800; color: #000; font-weight: bold; padding: 8px 14px; border: none; border-radius: 4px; cursor: pointer; float: right; font-size: 12px; margin-left: 8px; }
+          #clear-all-btn { background: #f44336; color: #fff; font-weight: bold; padding: 8px 14px; border: none; border-radius: 4px; cursor: pointer; float: right; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+
+        <div id="lock-screen">
+          <h3>🔒 系統安全驗證</h3>
+          <p style="font-size: 12px; color: #aaa; margin:0;">管理員模式：此處開放操作「全站所有 Cookie」。</p>
+          <input type="password" id="panel-password" placeholder="請輸入管理密碼" onkeydown="if(event.key==='Enter') checkPanelPassword()">
+          <button onclick="checkPanelPassword()">確認解鎖</button>
+        </div>
+
+        <div class="dev-tools-panel" id="main-panel">
+          <div class="dev-title">
+            <span>⚙️ 全局 Cookie 管理器 —（無限制模式）</span>
+            <div>
+              <button id="clear-all-btn" onclick="clearAllCookies()">🔥 清空全部 Cookie</button>
+              <button id="backup-sync-btn" onclick="triggerBackupAndDownload()">📥 下載全部並導出 JSON</button>
+              <button class="btn-sm" style="background:#555; color:#fff; padding: 8px 12px;" onclick="refreshCookieTable()">🔄 重新整理</button>
+            </div>
+          </div>
+
+          <table class="cookie-table">
+            <thead>
+              <tr>
+                <th style="width: 25%;">Cookie 名稱 (Key)</th>
+                <th style="width: 55%;">憑證數值 (Value)</th>
+                <th style="width: 20%;">操作項目</th>
+              </tr>
+            </thead>
+            <tbody id="cookie-list-body"></tbody>
+          </table>
+
+          <div class="add-cookie-box">
+            <span style="color:#00ffff; font-size:13px; font-weight:bold; align-self:center;">➕ 強制新增 Cookie:</span>
+            <input type="text" id="new-cookie-key" placeholder="任意名稱 (Key)" style="flex: 1;">
+            <input type="text" id="new-cookie-val" placeholder="數值 (Value)" style="flex: 2;">
+            <button class="btn-sm btn-save" onclick="addNewCookieFromPanel()">添加項目</button>
+          </div>
+
+          <div class="link-group">
+            <a href="/login">🔑 返回雲端帳號中控台</a>
+            <a href="/">🎮 返回遊戲首頁</a>
+          </div>
+        </div>
+
+        <script>
+          const PANEL_CORRECT_PASSWORD = "123456";
+
+          function checkPanelPassword() {
+            const input = document.getElementById('panel-password').value;
+            if (input === PANEL_CORRECT_PASSWORD) {
+              document.getElementById('lock-screen').style.display = 'none';
+              document.getElementById('main-panel').style.display = 'block';
+              refreshCookieTable(); 
+            } else {
+              alert('❌ 密碼錯誤！');
+            }
+          }
+
+          // 🛠️ 管理面板寫入：支援所有 Cookie 名稱，且自動刪除舊同名項目
+          function writeSingleCookie(key, value) {
+            const encodedKey = encodeURIComponent(key);
+            document.cookie = encodedKey + "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+            const maxAge = 400 * 24 * 60 * 60;
+            document.cookie = encodedKey + "=" + encodeURIComponent(value) + "; max-age=" + maxAge + "; path=/";
+          }
+
+          // 🛠️ 管理面板讀取：無 includes() 過濾，撈取「全站所有」Cookie
+          function getAllCookiesObj() {
+            const cookiesObj = {};
+            if (document.cookie) {
+              document.cookie.split(';').forEach(cookie => {
+                const parts = cookie.split('=');
+                const name = parts[0].trim();
+                const value = parts.slice(1).join('=').trim();
+                if (name) { 
+                  cookiesObj[decodeURIComponent(name)] = decodeURIComponent(value);
+                }
+              });
+            }
+            return cookiesObj;
+          }
+
+          function refreshCookieTable() {
+            const tbody = document.getElementById('cookie-list-body');
+            tbody.innerHTML = '';
+            const cookies = getAllCookiesObj();
+            const keys = Object.keys(cookies);
+
+            if (keys.length === 0) {
+              tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#888;">目前網站無任何 Cookie 憑證資料</td></tr>';
+              return;
+            }
+
+            keys.forEach((key, index) => {
+              const tr = document.createElement('tr');
+              const tdKey = document.createElement('td');
+              tdKey.innerText = key;
+              
+              const tdVal = document.createElement('td');
+              const inputVal = document.createElement('input');
+              inputVal.type = 'text';
+              inputVal.className = 'cookie-input-inline';
+              inputVal.value = cookies[key];
+              inputVal.id = 'cookie-input-' + index;
+              tdVal.appendChild(inputVal);
+
+              const tdActions = document.createElement('td');
+              const btnSave = document.createElement('button');
+              btnSave.className = 'btn-sm btn-save';
+              btnSave.innerText = '儲存';
+              btnSave.onclick = function() {
+                writeSingleCookie(key, document.getElementById('cookie-input-' + index).value);
+                alert('已更新！');
+                refreshCookieTable();
+              };
+
+              const btnDel = document.createElement('button');
+              btnDel.className = 'btn-sm btn-del';
+              btnDel.innerText = '刪除';
+              btnDel.onclick = function() {
+                document.cookie = encodeURIComponent(key) + "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+                refreshCookieTable();
+              };
+
+              tdActions.appendChild(btnSave);
+              tdActions.appendChild(btnDel);
+              tr.appendChild(tdKey);
+              tr.appendChild(tdVal);
+              tr.appendChild(tdActions);
+              tbody.appendChild(tr);
+            });
+          }
+
+          function clearAllCookies() {
+            const cookies = getAllCookiesObj();
+            Object.keys(cookies).forEach(key => {
+              document.cookie = encodeURIComponent(key) + "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+            });
+            refreshCookieTable();
+            alert('全站所有 Cookie 已清空！');
+          }
+
+          function addNewCookieFromPanel() {
+            const key = document.getElementById('new-cookie-key').value.trim();
+            const val = document.getElementById('new-cookie-val').value.trim();
+            if(!key) return;
+            writeSingleCookie(key, val);
+            document.getElementById('new-cookie-key').value = '';
+            document.getElementById('new-cookie-val').value = '';
+            refreshCookieTable();
+          }
+
+          async function triggerBackupAndDownload() {
+            const cookiesObj = getAllCookiesObj(); // 導出「全部」內容
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(cookiesObj, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", "all_cookies.json");
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+          }
+        </script>
+      </body>
+      </html>
